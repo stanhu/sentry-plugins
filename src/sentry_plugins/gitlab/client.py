@@ -75,7 +75,6 @@ class GitLabClient(object):
         )
 
     def get_last_commits(self, repo, end_sha):
-        print "last commit repo is %s %s" % (repo, end_sha)
         return self.request(
             'GET',
             '/projects/{}/repository/commits'.format(

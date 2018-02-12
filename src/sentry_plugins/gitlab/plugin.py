@@ -272,7 +272,6 @@ class GitLabRepositoryProvider(GitLabMixin, providers.RepositoryProvider):
             except Exception as e:
                 self.raise_error(e)
             else:
-                print "validate_config repo is %s" % repo
                 config['external_id'] = repo['id']
         return config
 
