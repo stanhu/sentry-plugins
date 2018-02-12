@@ -1,10 +1,13 @@
 from __future__ import absolute_import
 
+import logging
+
 from sentry.plugins.bases.issue2 import IssuePlugin2
 from sentry.utils.http import absolute_uri
 
 from sentry_plugins.base import CorePluginMixin
 from sentry_plugins.exceptions import ApiError
+from sentry.plugins import providers
 from sentry_plugins.utils import get_secret_field_config
 
 from .client import GitLabClient
@@ -16,6 +19,9 @@ class GitLabPlugin(CorePluginMixin, IssuePlugin2):
     title = 'GitLab'
     conf_title = title
     conf_key = 'gitlab'
+
+    def setup(self, bindings):
+        bindings.add('repository.provider', GitLabRepositoryProvider, id='gitlab')
 
     def is_configured(self, request, project, **kwargs):
         return bool(
@@ -194,3 +200,127 @@ class GitLabPlugin(CorePluginMixin, IssuePlugin2):
         except Exception as e:
             self.raise_error(e)
         return config
+
+
+class GitLabMixin(CorePluginMixin):
+    def message_from_error(self, exc):
+        if isinstance(exc, ApiError):
+            message = API_ERRORS.get(exc.code)
+            if message:
+                return message
+            return (
+                'Error Communicating with GitLab (HTTP %s): %s' % (
+                    exc.code, exc.json.get('message', 'unknown error')
+                    if exc.json else 'unknown error',
+                )
+            )
+        else:
+            return ERR_INTERNAL
+
+    def get_client(self, project):
+        # TODO HACK
+        url = 'https://gitlab.com'
+        token = 'MY-TOKEN-HERE'
+
+        return GitLabClient(url, token)
+
+    def validate_config(self, project, config, actor=None):
+        url = config['gitlab_url'].rstrip('/')
+        token = config['gitlab_token']
+        repo = config['gitlab_repo']
+
+        client = GitLabClient(url, token)
+        try:
+            client.get_project(repo)
+        except Exception as e:
+            self.raise_error(e)
+        return config
+
+
+class GitLabRepositoryProvider(GitLabMixin, providers.RepositoryProvider):
+    name = 'GitLab'
+    auth_provider = 'gitlab'
+    logger = logging.getLogger('sentry.plugins.gitlab')
+
+    def needs_auth(self, user):
+        return False
+
+    def get_config(self):
+        return [
+            {
+                'name': 'name',
+                'label': 'Repository Name',
+                'type': 'text',
+                'placeholder': 'e.g. getsentry/sentry',
+                'help': 'Enter your repository name, including the owner.',
+                'required': True,
+            }
+        ]
+
+    def validate_config(self, organization, config, actor=None):
+        """
+        ```
+        if config['foo'] and not config['bar']:
+            raise PluginError('You cannot configure foo with bar')
+        return config
+        ```
+        """
+        if config.get('name'):
+            client = self.get_client(actor)
+            try:
+                repo = client.get_project(config['name'])
+            except Exception as e:
+                self.raise_error(e)
+            else:
+                print "validate_config repo is %s" % repo
+                config['external_id'] = repo['id']
+        return config
+
+    def create_repository(self, organization, data, actor=None):
+        if actor is None:
+            raise NotImplementedError('Cannot create a repository anonymously')
+
+        return {
+            'name': data['name'],
+            'external_id': data['external_id'],
+            # TODO: Make URL configurable
+            'url': 'https://gitlab.com/{}'.format(data['name']),
+            'config': {
+                'name': data['name']
+            }
+        }
+
+    def delete_repository(self, repo, actor=None):
+        pass
+
+    def _format_commits(self, repo, commit_list):
+        return [
+            {
+                'id': c['id'],
+                'repository': repo.name,
+                'author_email': c['author_email'],
+                'author_name': c['author_name'],
+                'message': c['message'],
+            } for c in commit_list
+        ]
+
+    def compare_commits(self, repo, start_sha, end_sha, actor=None):
+        if actor is None:
+            raise NotImplementedError('Cannot fetch commits anonymously')
+        client = self.get_client(actor)
+
+        name = repo.config['name']
+        if start_sha is None:
+            try:
+                res = client.get_last_commits(name, end_sha)
+            except Exception as e:
+                self.raise_error(e)
+            else:
+                return self._format_commits(repo, res[:10])
+        else:
+            try:
+                res = client.compare_commits(name, start_sha, end_sha)
+            except Exception as e:
+                self.raise_error(e)
+            else:
+                return self._format_commits(repo, res['commits'])

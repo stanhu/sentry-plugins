@@ -19,7 +19,7 @@ class GitLabClient(object):
         session = build_session()
         try:
             resp = getattr(session, method.lower())(
-                url='{}/api/v3/{}'.format(self.url, path.lstrip('/')),
+                url='{}/api/v4/{}'.format(self.url, path.lstrip('/')),
                 headers=headers,
                 json=data,
                 params=params,
@@ -72,4 +72,37 @@ class GitLabClient(object):
         return self.request(
             'GET',
             '/projects/{}/members'.format(quote(repo, safe='')),
+        )
+
+    def get_last_commits(self, repo, end_sha):
+        print "last commit repo is %s %s" % (repo, end_sha)
+        return self.request(
+            'GET',
+            '/projects/{}/repository/commits'.format(
+                quote(repo, safe=''),
+            )
+        )
+
+    def get_commits(self, instance, repo, commit, limit=100):
+        return self.request(
+            'GET',
+            '/projects/{}/repository/commits/{}'.format(
+                quote(repo, safe=''),
+                commit
+            ),
+            params={
+                'per_page': limit
+            }
+        )
+
+    def get_commit_range(self, instance, repo, start_sha, end_sha):
+        return self.request(
+            'GET',
+            '/projects/{}/repository/compare'.format(
+                quote(repo, safe='')
+            ),
+            params={
+                'from': start_sha,
+                'to': end_sha
+            }
         )
