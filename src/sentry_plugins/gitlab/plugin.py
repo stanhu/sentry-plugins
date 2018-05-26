@@ -1,11 +1,11 @@
 from __future__ import absolute_import
 
 import logging
-
 from sentry.plugins.bases.issue2 import IssuePlugin2
 from sentry.utils.http import absolute_uri
 
 from sentry_plugins.base import CorePluginMixin
+from sentry_plugins.constants import ERR_UNAUTHORIZED, ERR_INTERNAL
 from sentry_plugins.exceptions import ApiError
 from sentry.plugins import providers
 from sentry_plugins.utils import get_secret_field_config
@@ -201,13 +201,9 @@ class GitLabPlugin(CorePluginMixin, IssuePlugin2):
             self.raise_error(e)
         return config
 
-
 class GitLabMixin(CorePluginMixin):
     def message_from_error(self, exc):
         if isinstance(exc, ApiError):
-            message = API_ERRORS.get(exc.code)
-            if message:
-                return message
             return (
                 'Error Communicating with GitLab (HTTP %s): %s' % (
                     exc.code, exc.json.get('message', 'unknown error')
@@ -217,10 +213,9 @@ class GitLabMixin(CorePluginMixin):
         else:
             return ERR_INTERNAL
 
-    def get_client(self, project):
-        # TODO HACK
-        url = 'https://gitlab.com'
-        token = 'MY-TOKEN-HERE'
+    def get_client(self, project, config):
+        url = config['gitlab_url'].rstrip('/')
+        token = config['gitlab_token']
 
         return GitLabClient(url, token)
 
@@ -248,6 +243,22 @@ class GitLabRepositoryProvider(GitLabMixin, providers.RepositoryProvider):
     def get_config(self):
         return [
             {
+                'name': 'gitlab_url',
+                'label': 'GitLab URL',
+                'type': 'url',
+                'default': 'https://gitlab.com',
+                'placeholder': 'e.g. https://gitlab.example.com',
+                'required': True,
+                'help': 'Enter the URL for your GitLab server.'
+            },
+            {
+                'name': 'gitlab_token',
+                'label': 'Access Token',
+                'type': 'text',
+                'placeholder': 'e.g. g5DWFtLzaztgYFrqhVfE',
+                'required': True,
+            },
+            {
                 'name': 'name',
                 'label': 'Repository Name',
                 'type': 'text',
@@ -266,7 +277,7 @@ class GitLabRepositoryProvider(GitLabMixin, providers.RepositoryProvider):
         ```
         """
         if config.get('name'):
-            client = self.get_client(actor)
+            client = self.get_client(actor, config)
             try:
                 repo = client.get_project(config['name'])
             except Exception as e:
@@ -279,13 +290,15 @@ class GitLabRepositoryProvider(GitLabMixin, providers.RepositoryProvider):
         if actor is None:
             raise NotImplementedError('Cannot create a repository anonymously')
 
+        url = data['gitlab_url'].rstrip('/')
         return {
             'name': data['name'],
             'external_id': data['external_id'],
-            # TODO: Make URL configurable
-            'url': 'https://gitlab.com/{}'.format(data['name']),
+            'url': '{}/{}'.format(url, data['name']),
             'config': {
-                'name': data['name']
+                'name': data['name'],
+                'gitlab_url': url,
+                'gitlab_token': data['gitlab_token']
             }
         }
 
@@ -306,7 +319,7 @@ class GitLabRepositoryProvider(GitLabMixin, providers.RepositoryProvider):
     def compare_commits(self, repo, start_sha, end_sha, actor=None):
         if actor is None:
             raise NotImplementedError('Cannot fetch commits anonymously')
-        client = self.get_client(actor)
+        client = self.get_client(actor, repo.config)
 
         name = repo.config['name']
         if start_sha is None:
@@ -323,3 +336,4 @@ class GitLabRepositoryProvider(GitLabMixin, providers.RepositoryProvider):
                 self.raise_error(e)
             else:
                 return self._format_commits(repo, res['commits'])
+
