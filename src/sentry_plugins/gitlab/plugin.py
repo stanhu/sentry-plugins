@@ -12,8 +12,6 @@ from sentry_plugins.utils import get_secret_field_config
 
 from .client import GitLabClient
 
-from pprint import pprint
-
 
 class GitLabPlugin(CorePluginMixin, IssuePlugin2):
     description = 'Integrate GitLab issues by linking a repository to a project'
