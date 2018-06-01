@@ -5,14 +5,12 @@ from sentry.plugins.bases.issue2 import IssuePlugin2
 from sentry.utils.http import absolute_uri
 
 from sentry_plugins.base import CorePluginMixin
-from sentry_plugins.constants import ERR_UNAUTHORIZED, ERR_INTERNAL
+from sentry_plugins.constants import ERR_INTERNAL
 from sentry_plugins.exceptions import ApiError
 from sentry.plugins import providers
 from sentry_plugins.utils import get_secret_field_config
 
 from .client import GitLabClient
-
-from pprint import pprint
 
 
 class GitLabPlugin(CorePluginMixin, IssuePlugin2):
@@ -202,17 +200,6 @@ class GitLabPlugin(CorePluginMixin, IssuePlugin2):
         except Exception as e:
             self.raise_error(e)
         return config
-
-API_ERRORS = {
-    404: 'GitHub returned a 404 Not Found error. If this repository exists, ensure'
-         ' you have the appropriate write permissions for it, and that Sentry is'
-         ' an authorized OAuth app in your Github account settings (https://github.com/settings/applications).',
-    422: 'GitHub returned a 422 Validation failed. This usually means that there is '
-         'already a webhook set up for Sentry for this repository. Please go to your '
-         'repository settings, click on the Webhooks tab, and delete the existing webhook '
-         'before adding the repository again.',
-    401: ERR_UNAUTHORIZED,
-}
 
 class GitLabMixin(CorePluginMixin):
     def message_from_error(self, exc):
