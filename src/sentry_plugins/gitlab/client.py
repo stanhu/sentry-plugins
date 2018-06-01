@@ -94,7 +94,7 @@ class GitLabClient(object):
             }
         )
 
-    def get_commit_range(self, instance, repo, start_sha, end_sha):
+    def get_commit_range(self, repo, start_sha, end_sha):
         return self.request(
             'GET',
             '/projects/{}/repository/compare'.format(

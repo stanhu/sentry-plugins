@@ -5,7 +5,7 @@ from sentry.plugins.bases.issue2 import IssuePlugin2
 from sentry.utils.http import absolute_uri
 
 from sentry_plugins.base import CorePluginMixin
-from sentry_plugins.constants import ERR_UNAUTHORIZED, ERR_INTERNAL
+from sentry_plugins.constants import ERR_INTERNAL
 from sentry_plugins.exceptions import ApiError
 from sentry.plugins import providers
 from sentry_plugins.utils import get_secret_field_config
@@ -331,7 +331,7 @@ class GitLabRepositoryProvider(GitLabMixin, providers.RepositoryProvider):
                 return self._format_commits(repo, res[:10])
         else:
             try:
-                res = client.compare_commits(name, start_sha, end_sha)
+                res = client.get_commit_range(name, start_sha, end_sha)
             except Exception as e:
                 self.raise_error(e)
             else:
