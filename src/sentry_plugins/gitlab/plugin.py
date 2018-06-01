@@ -305,7 +305,7 @@ class GitLabRepositoryProvider(GitLabMixin, providers.RepositoryProvider):
     def delete_repository(self, repo, actor=None):
         pass
 
-    def _format_commits(self, repo, commit_list):
+    def _format_commits(self, repo, commit_list, gitlab_diff=[]):
         return [
             {
                 'id': c['id'],
@@ -313,8 +313,27 @@ class GitLabRepositoryProvider(GitLabMixin, providers.RepositoryProvider):
                 'author_email': c['author_email'],
                 'author_name': c['author_name'],
                 'message': c['message'],
+                'patch_set': self._format_patchset(gitlab_diff)
             } for c in commit_list
         ]
+
+    def _change_type(self, diff):
+        change_type = 'A' if diff['new_file'] else 'M'
+        change_type = 'D' if diff['deleted_file'] else change_type
+
+        return change_type
+
+    def _format_patchset(self, gitlab_diff):
+        try:
+            return [
+                {
+                    'path': c['old_path'] if c['deleted_file'] else c['new_path'],
+                    'type': self._change_type(c)
+                } for c in gitlab_diff
+            ]
+        except Exception as e:
+                self.raise_error(e)
+        return ''
 
     def compare_commits(self, repo, start_sha, end_sha, actor=None):
         if actor is None:
@@ -335,5 +354,4 @@ class GitLabRepositoryProvider(GitLabMixin, providers.RepositoryProvider):
             except Exception as e:
                 self.raise_error(e)
             else:
-                return self._format_commits(repo, res['commits'])
-
+                return self._format_commits(repo, res['commits'], res['diffs'])
